@@ -24,7 +24,7 @@ class TheGraph(graph_tool.Graph):
         for key in ['givn', 'surn', 'birt', 'birp', 'deat', 'deap']:
             self.vp[key] = self.new_vertex_property('string')
         # for @F…@ vertices
-        for key in ['date', 'plac', 'deap']:
+        for key in ['date', 'plac']:
             self.vp[key] = self.new_vertex_property('string')
 
     def by_id(self, id: str):

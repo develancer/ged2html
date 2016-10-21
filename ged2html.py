@@ -6,6 +6,8 @@
 import sys
 import re
 import graph_tool
+import graph_tool.search
+import graph_tool.topology
 
 if sys.hexversion < 0x030000F0:
     sys.exit("ERROR: Python 3 is needed to run this program")
@@ -26,6 +28,10 @@ class TheGraph(graph_tool.Graph):
         # for @F…@ vertices
         for key in ['date', 'plac']:
             self.vp[key] = self.new_vertex_property('string')
+        # father -> family and family -> children
+        self.ep.male = self.new_edge_property('bool')
+        # family -> mother
+        self.ep.wife = self.new_edge_property('bool')
 
     def by_id(self, id: str):
         if id in self._vertex_by_id:
@@ -105,9 +111,30 @@ with open(inpath, 'rt') as infile :
 
         if level == 1 and last0 == 'FAM' :
             other = value.strip('@')
-            if ident == 'HUSB' or ident == 'WIFE':
-                g.add_edge(g.by_id(other), g.by_id(lastid))
+            if ident == 'HUSB':
+                e = g.add_edge(g.by_id(other), g.by_id(lastid))
+                g.ep.male[e] = True
+            if ident == 'WIFE':
+                e = g.add_edge(g.by_id(other), g.by_id(lastid))
+                g.ep.wife[e] = True
             if ident == 'CHIL' :
-                g.add_edge(g.by_id(lastid), g.by_id(other))
+                e = g.add_edge(g.by_id(lastid), g.by_id(other))
+                g.ep.male[e] = True
 
-g.save(outpath)
+for v in g.vertices():
+    if g.vp.id[v][0] == 'F':
+        if v.in_degree() == 1:
+            for single_mother in v.in_edges():
+                g.ep.male[single_mother] = True
+                break
+
+gmale = graph_tool.GraphView(g, efilt=g.ep.male)
+
+class Printer(graph_tool.search.BFSVisitor):
+    def examine_vertex(self, v):
+        print(g.vp.givn[v], g.vp.surn[v])
+
+for v in g.vertices():
+    if v.in_degree() == 0:
+        print('-----')
+        graph_tool.search.bfs_search(gmale, v, Printer())

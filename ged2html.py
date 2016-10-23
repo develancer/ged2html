@@ -178,6 +178,24 @@ class TheGraph(Graph):
         # family -> spouse
         self.vp.spouse = self.new_vertex_property('object')
 
+    @classmethod
+    def _from_english_month(cls, mon):
+        data = {
+            'JAN': '01',
+            'FEB': '02',
+            'MAR': '03',
+            'APR': '04',
+            'MAY': '05',
+            'JUN': '06',
+            'JUL': '07',
+            'AUG': '08',
+            'SEP': '09',
+            'OCT': '10',
+            'NOV': '11',
+            'DEC': '12',
+        }
+        return data[mon] if mon in data else mon
+
     def by_id(self, gedid: str):
         """
         Return node with given GEDCOM ID, or create one if it does not exist.
@@ -259,23 +277,7 @@ class TheGraph(Graph):
                         g.vp.surn[g.by_id(lastid)] = value
 
                 if level == 2 and ident == 'DATE':
-                    parts = value.split()
-                    if len(parts) >= 2:
-                        parts[-2] = {
-                            'JAN': '01',
-                            'FEB': '02',
-                            'MAR': '03',
-                            'APR': '04',
-                            'MAY': '05',
-                            'JUN': '06',
-                            'JUL': '07',
-                            'AUG': '08',
-                            'SEP': '09',
-                            'OCT': '10',
-                            'NOV': '11',
-                            'DEC': '12',
-                        }[parts[-2]]
-                    # TODO wyciągać miesiąc i rok, jeśli są
+                    parts = list(map(cls._from_english_month, value.split()))
                     year = '.'.join(parts[::-1])
                     if last0 == 'INDI' and last1 == 'BIRT':
                         g.vp.birt[g.by_id(lastid)] = year

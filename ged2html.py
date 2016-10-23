@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #####################################################################
 # Convert GEDCOM family tree to a directed (sub)graph. Usage:
-#   python gedcom2graph.py input.ged output.xml
+#   python gedcom2graph.py input.ged output.html
 #####################################################################
 import sys
 import re
@@ -13,7 +13,65 @@ if sys.hexversion < 0x030000F0:
     sys.exit("ERROR: Python 3 is needed to run this program")
 
 if len(sys.argv) < 3 :
-    sys.exit("USAGE: gedcom2graph.py input.ged output.xml")
+    sys.exit("USAGE: gedcom2graph.py input.ged output.html")
+
+class Counter(graph_tool.search.DFSVisitor):
+
+    def __init__(self, graph):
+        self.graph = graph
+        self.roots_from_id = {}
+        self.count = None
+        self.root = None
+
+    def _record(self, v):
+        if v not in self.roots_from_id:
+            self.roots_from_id[v] = []
+        self.roots_from_id[v].append(self.root)
+        self.count += 1
+
+    def discover_vertex(self, v):
+        if self.graph.vp.id[v][0] == 'I':
+            self._record(v)
+        if self.graph.vp.id[v][0] == 'F':
+            m = self.graph.vp.mother[v]
+            if m is not None:
+                self._record(m)
+
+    def start_vertex(self, v):
+        self.count = 0
+        self.root = v
+
+class Printer(graph_tool.search.DFSVisitor):
+
+    refs_from_id = {}
+
+    def __init__(self, graph):
+        self.graph = graph
+        self.level = 0
+        self.lines = []
+
+    def discover_vertex(self, v):
+        if self.graph.vp.id[v][0] == 'I':
+            line = '│ '*(self.level-1) + '├ ' if self.level else ''
+            self.lines.append(line + self.graph.format_name(v))
+            self.level += 1
+        if self.graph.vp.id[v][0] == 'F':
+            m = self.graph.vp.mother[v]
+            if m is not None:
+                line = '│ '*(self.level-1) + '│'
+                self.lines.append(line + '+' + self.graph.format_name(m))
+
+    def finish_vertex(self, v):
+        if self.graph.vp.id[v][0] == 'I':
+            self.level -= 1
+            if self.lines:
+                last = self.lines[-1]
+                pos = self.level * 2
+                if last[pos] == '├':
+                    last = last[:pos] + '└' + last[pos+1:]
+                elif last[pos] == '│':
+                    last = last[:pos] + '╵' + last[pos+1:]
+                self.lines[-1] = last
 
 
 class TheGraph(graph_tool.Graph):
@@ -31,7 +89,7 @@ class TheGraph(graph_tool.Graph):
         # father -> family and family -> children
         self.ep.male = self.new_edge_property('bool')
         # family -> mother
-        self.ep.wife = self.new_edge_property('bool')
+        self.vp.mother = self.new_vertex_property('object')
 
     def by_id(self, id: str):
         if id in self._vertex_by_id:
@@ -41,6 +99,15 @@ class TheGraph(graph_tool.Graph):
             self.vp.id[v] = id
             self._vertex_by_id[id] = v
         return v
+
+    def format_name(self, v):
+        name = self.vp.givn[v]
+        if not name:
+            name = 'NN.'
+        if self.vp.surn[v]:
+            name += ' ' + self.vp.surn[v]
+        return name
+
 
 g = TheGraph()
 inpath, outpath = sys.argv[1:3]
@@ -116,25 +183,46 @@ with open(inpath, 'rt') as infile :
                 g.ep.male[e] = True
             if ident == 'WIFE':
                 e = g.add_edge(g.by_id(other), g.by_id(lastid))
-                g.ep.wife[e] = True
+                g.vp.mother[g.by_id(lastid)] = g.by_id(other)
             if ident == 'CHIL' :
                 e = g.add_edge(g.by_id(lastid), g.by_id(other))
                 g.ep.male[e] = True
 
 for v in g.vertices():
     if g.vp.id[v][0] == 'F':
-        if v.in_degree() == 1:
-            for single_mother in v.in_edges():
-                g.ep.male[single_mother] = True
-                break
+        mother = None
+        father = None
+        for parent in v.in_edges():
+            if g.ep.male[parent]:
+                father = parent
+            else:
+                mother = parent
+        if mother is not None:
+            if father is None:
+                g.ep.male[mother] = True
+                g.vp.mother[v] = None
+            elif mother.source().in_degree() and not father.source().in_degree():
+                g.ep.male[mother] = True
+                g.ep.male[father] = False
+                g.vp.mother[v] = father.source()
 
 gmale = graph_tool.GraphView(g, efilt=g.ep.male)
 
-class Printer(graph_tool.search.BFSVisitor):
-    def examine_vertex(self, v):
-        print(g.vp.givn[v], g.vp.surn[v])
-
+counter = Counter(g)
+counts = {}
 for v in g.vertices():
     if v.in_degree() == 0:
-        print('-----')
-        graph_tool.search.bfs_search(gmale, v, Printer())
+        graph_tool.search.dfs_search(gmale, v, counter)
+        counts[v] = counter.count
+
+with open(outpath, 'wt') as f:
+    f.write('<!DOCTYPE html>\n<head><meta charset="utf-8" /></head>\n<body style="font-family:\'DejaVu Serif\', serif">\n')
+    for v, count in [(k, counts[k]) for k in sorted(counts, key=counts.get, reverse=True)]:
+        printer = Printer(g)
+        graph_tool.search.dfs_search(gmale, v, printer)
+        if len(printer.lines) > 1:
+            f.write('<p>\n')
+            for line in printer.lines:
+                f.write(line+"<br>\n")
+            f.write('</p>\n')
+    f.write('</body>\n</html>\n')

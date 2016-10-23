@@ -12,8 +12,9 @@ import graph_tool.topology
 if sys.hexversion < 0x030000F0:
     sys.exit("ERROR: Python 3 is needed to run this program")
 
-if len(sys.argv) < 3 :
+if len(sys.argv) < 3:
     sys.exit("USAGE: gedcom2graph.py input.ged output.html")
+
 
 class Counter(graph_tool.search.DFSVisitor):
 
@@ -40,6 +41,7 @@ class Counter(graph_tool.search.DFSVisitor):
     def start_vertex(self, v):
         self.count = 0
         self.root = v
+
 
 class Printer(graph_tool.search.DFSVisitor):
 
@@ -87,7 +89,7 @@ class TheGraph(graph_tool.Graph):
         for key in ['date', 'plac']:
             self.vp[key] = self.new_vertex_property('string')
         # father -> family and family -> children
-        self.ep.male = self.new_edge_property('bool')
+        self.ep.male = self.new_edge_property('bool', val=False)
         # family -> mother
         self.vp.mother = self.new_vertex_property('object')
 
@@ -108,6 +110,7 @@ class TheGraph(graph_tool.Graph):
             name += ' ' + self.vp.surn[v]
         return name
 
+###############################################################################
 
 g = TheGraph()
 inpath, outpath = sys.argv[1:3]
@@ -115,37 +118,37 @@ inpath, outpath = sys.argv[1:3]
 lastid = last0 = last1 = None
 regex = re.compile('^(\d+)\s+(\S+)(.*)$')
 regid = re.compile('^@([A-Z]\d+)@$')
-with open(inpath, 'rt') as infile :
-    for line in infile.readlines() :
+with open(inpath, 'rt') as infile:
+    for line in infile.readlines():
         match = regex.match(line.strip())
-        if match is None :
+        if match is None:
             continue
         level = int(match.group(1))
         ident = match.group(2)
         value = match.group(3).strip()
 
-        if level == 0 :
+        if level == 0:
             idmatch = regid.match(ident)
             lastid = last0 = last1 = None
-            if idmatch is not None :
+            if idmatch is not None:
                 lastid = idmatch.group(1)
                 last0 = value
 
-        if level == 1 and last0 is not None :
+        if level == 1 and last0 is not None:
             last1 = ident
 
-        if level == 1 and last1 == 'DEAT' :
+        if level == 1 and last1 == 'DEAT':
             g.vp.deat[g.by_id(lastid)] = ''
 
-        if level == 2 and last0 == 'INDI' and last1 == 'NAME' :
-            if ident == 'GIVN' :
+        if level == 2 and last0 == 'INDI' and last1 == 'NAME':
+            if ident == 'GIVN':
                 g.vp.givn[g.by_id(lastid)] = value
-            if ident == 'SURN' :
+            if ident == 'SURN':
                 g.vp.surn[g.by_id(lastid)] = value
 
-        if level == 2 and ident == 'DATE' :
+        if level == 2 and ident == 'DATE':
             parts = value.split()
-            if len(parts) >= 2 :
+            if len(parts) >= 2:
                 parts[-2] = {
                     'JAN': '01',
                     'FEB': '02',
@@ -162,21 +165,21 @@ with open(inpath, 'rt') as infile :
                 }[parts[-2]]
             # TODO wyciągać miesiąc i rok, jeśli są
             year = '.'.join(parts[::-1])
-            if last0 == 'INDI' and last1 == 'BIRT' :
+            if last0 == 'INDI' and last1 == 'BIRT':
                 g.vp.birt[g.by_id(lastid)] = year
-            if last0 == 'INDI' and last1 == 'DEAT' :
+            if last0 == 'INDI' and last1 == 'DEAT':
                 g.vp.deat[g.by_id(lastid)] = year
-            if last0 == 'FAM' and last1 == 'MARR' :
+            if last0 == 'FAM' and last1 == 'MARR':
                 g.vp.date[g.by_id(lastid)] = year
 
-        if level == 2 and last0 == 'INDI' and last1 == 'BIRT' and ident == 'PLAC' :
+        if level == 2 and last0 == 'INDI' and last1 == 'BIRT' and ident == 'PLAC':
             g.vp.birp[g.by_id(lastid)] = value
-        if level == 2 and last0 == 'INDI' and last1 == 'DEAT' and ident == 'PLAC' :
+        if level == 2 and last0 == 'INDI' and last1 == 'DEAT' and ident == 'PLAC':
             g.vp.deap[g.by_id(lastid)] = value
-        if level == 2 and last0 == 'FAM' and last1 == 'MARR' and ident == 'PLAC' :
+        if level == 2 and last0 == 'FAM' and last1 == 'MARR' and ident == 'PLAC':
             g.vp.plac[g.by_id(lastid)] = value
 
-        if level == 1 and last0 == 'FAM' :
+        if level == 1 and last0 == 'FAM':
             other = value.strip('@')
             if ident == 'HUSB':
                 e = g.add_edge(g.by_id(other), g.by_id(lastid))
@@ -184,7 +187,7 @@ with open(inpath, 'rt') as infile :
             if ident == 'WIFE':
                 e = g.add_edge(g.by_id(other), g.by_id(lastid))
                 g.vp.mother[g.by_id(lastid)] = g.by_id(other)
-            if ident == 'CHIL' :
+            if ident == 'CHIL':
                 e = g.add_edge(g.by_id(lastid), g.by_id(other))
                 g.ep.male[e] = True
 

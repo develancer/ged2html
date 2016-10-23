@@ -16,9 +16,6 @@ except ImportError:
 if sys.hexversion < 0x030000F0:
     sys.exit("ERROR: Python 3 is needed to run this program")
 
-if len(sys.argv) < 3:
-    sys.exit("USAGE: gedcom2graph.py input.ged output.html")
-
 
 class Counter(DFSVisitor):
     """DFS visitor to count and index genealogical branches in the graph."""
@@ -330,35 +327,38 @@ class TheGraph(Graph):
 
 ###############################################################################
 
-# reading command-line arguments
-inpath, outpath = sys.argv[1:3]
+if __name__ == "__main__":
+    # reading command-line arguments
+    if len(sys.argv) < 3:
+        sys.exit("USAGE: gedcom2graph.py input.ged output.html")
+    inpath, outpath = sys.argv[1:3]
 
-# reading GEDCOM file into graph
-g = TheGraph.read_from_gedcom(inpath)
+    # reading GEDCOM file into graph
+    g = TheGraph.read_from_gedcom(inpath)
 
-# filtering out the main line of inheritance
-gmain = GraphView(g, efilt=g.ep.main)
+    # filtering out the main line of inheritance
+    gmain = GraphView(g, efilt=g.ep.main)
 
-# indexing connected components of the filtered graph
-# as the genealogical branches of the tree
-counter = Counter(g)
-counts = {}
-for v in g.vertices():
-    if v.in_degree() == 0:
-        dfs_search(gmain, v, counter)
-        if counter.count > 1:
-            counts[v] = counter.count
+    # indexing connected components of the filtered graph
+    # as the genealogical branches of the tree
+    counter = Counter(g)
+    counts = {}
+    for v in g.vertices():
+        if v.in_degree() == 0:
+            dfs_search(gmain, v, counter)
+            if counter.count > 1:
+                counts[v] = counter.count
 
-# sorting the branches by the size in descending order
-roots = []
-num_from_root = {}
-for v in sorted(counts, key=counts.get, reverse=True):
-    roots.append(v)
-    num_from_root[v] = str(len(roots))
+    # sorting the branches by the size in descending order
+    roots = []
+    num_from_root = {}
+    for v in sorted(counts, key=counts.get, reverse=True):
+        roots.append(v)
+        num_from_root[v] = str(len(roots))
 
-# writing results as HTML
-with open(outpath, 'wt') as f:
-    f.write('''<!DOCTYPE html>
+    # writing results as HTML
+    with open(outpath, 'wt') as f:
+        f.write('''<!DOCTYPE html>
 <head><meta charset="utf-8" />
 <style type="text/css"><!--
   body {font-family:'DejaVu Serif', serif;}
@@ -367,12 +367,13 @@ with open(outpath, 'wt') as f:
   .invis {visibility:hidden;}
 --></style></head><body>
 ''')
-    for v in roots:
-        f.write('<h2>Diagram %s. %s</h2>\n' % (num_from_root[v], g.vp.surn[v]))
-        printer = Printer(g, counter.roots_per_vertex, num_from_root)
-        dfs_search(gmain, v, printer)
-        f.write('<p>\n')
-        for line in printer.lines:
-            f.write(line+"<br>\n")
-        f.write('</p>\n')
-    f.write('</body>\n</html>\n')
+        for v in roots:
+            f.write('<h2>Diagram %s. %s</h2>\n'
+                    % (num_from_root[v], g.vp.surn[v]))
+            printer = Printer(g, counter.roots_per_vertex, num_from_root)
+            dfs_search(gmain, v, printer)
+            f.write('<p>\n')
+            for line in printer.lines:
+                f.write(line+"<br>\n")
+            f.write('</p>\n')
+        f.write('</body>\n</html>\n')

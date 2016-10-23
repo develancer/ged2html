@@ -104,8 +104,8 @@ class Printer(DFSVisitor):
             if root != self.root and root in self.num_from_root:
                 diagrams.append(self.num_from_root[root])
         if diagrams:
-            result += ' → <span class=diagrams>' + \
-                      ', '.join(sorted(diagrams)) + '</span>'
+            result += (' → <span class=diagrams>'
+                       + ', '.join(sorted(diagrams)) + '</span>')
         return result
 
     def discover_vertex(self, v):
@@ -121,7 +121,7 @@ class Printer(DFSVisitor):
         if self.graph.vp.gedid[v][0] == 'F':
             m = self.graph.vp.spouse[v]
             if m is not None:
-                line = '│ '*(self.level-1) + '│'
+                line = '│ '*(self.level-1) + '┆'
                 small = '⚭' + self.graph.vp.date[v]
                 if self.graph.vp.plac[v]:
                     small += ' ('+self.graph.vp.plac[v]+')'
@@ -137,13 +137,20 @@ class Printer(DFSVisitor):
         if self.graph.vp.gedid[v][0] == 'I':
             self.level -= 1
             if self.lines:
-                last = self.lines[-1]
+                index = len(self.lines) - 1
+                last = self.lines[index]
                 pos = self.level * 2
+                while (last[pos] == '│' and index > 0
+                       and self.lines[index-1][pos] in ['├', '│', '┆']):
+                    invis = '<span class=invis>│</span>'
+                    self.lines[index] = last[:pos] + invis + last[pos+1:]
+                    index -= 1
+                    last = self.lines[index]
                 if last[pos] == '├':
                     last = last[:pos] + '└' + last[pos+1:]
-                elif last[pos] == '│':
+                elif last[pos] in ['│', '┆']:
                     last = last[:pos] + '╵' + last[pos+1:]
-                self.lines[-1] = last
+                self.lines[index] = last
 
     def start_vertex(self, v):
         """
@@ -357,6 +364,7 @@ with open(outpath, 'wt') as f:
   body {font-family:'DejaVu Serif', serif;}
   .dates {font-size:smaller;}
   .diagrams {font-weight:bold;}
+  .invis {visibility:hidden;}
 --></style></head><body>
 ''')
     for v in roots:

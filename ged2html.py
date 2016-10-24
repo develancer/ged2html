@@ -158,6 +158,38 @@ class Printer(DFSVisitor):
         self.root = v
 
 
+class Gatherer(DFSVisitor):
+    """DFS visitor storing all visited vertices in the internal list."""
+
+    def __init__(self):
+        """Create a new Gatherer instance."""
+        self.visited = []
+
+    def discover_vertex(self, v):
+        """
+        Invoke when a vertex is encountered for the first time.
+
+        :param Vertex v: vertex
+        """
+        self.visited.append(v)
+
+
+class Selector(DFSVisitor):
+    """DFS visitor setting "selected" property for all visited vertices."""
+
+    def __init__(self, graph: Graph):
+        """Create a new Selector instance."""
+        self.graph = graph
+
+    def discover_vertex(self, v):
+        """
+        Invoke when a vertex is encountered for the first time.
+
+        :param Vertex v: vertex
+        """
+        self.graph.vp.selected[v] = True
+
+
 class TheGraph(Graph):
     """Subclass of graph_tool.Graph with GEDCOM-related functionality."""
 
@@ -196,19 +228,22 @@ class TheGraph(Graph):
         }
         return data[mon] if mon in data else mon
 
-    def by_id(self, gedid: str):
+    def by_id(self, gedid: str, allow_create: bool = True):
         """
         Return node with given GEDCOM ID, or create one if it does not exist.
 
         :param str gedid: GEDCOM-style ID, e.g. I123
+        :param bool allow_create: if False, raise exception instead of creating
         :return Vertex: vertex with given GEDCOM ID
         """
         if gedid in self._vertex_by_id:
             v = self._vertex_by_id[gedid]
-        else:
+        elif allow_create:
             v = self.add_vertex()
             self.vp.gedid[v] = gedid
             self._vertex_by_id[gedid] = v
+        else:
+            raise Exception("node "+gedid+" does not exist")
         return v
 
     def format_name(self, v):
@@ -332,11 +367,24 @@ class TheGraph(Graph):
 if __name__ == "__main__":
     # reading command-line arguments
     if len(sys.argv) < 3:
-        sys.exit("USAGE: gedcom2graph.py input.ged output.html")
+        sys.exit("USAGE: gedcom2graph.py input.ged output.html [ start_id ]")
     inpath, outpath = sys.argv[1:3]
 
     # reading GEDCOM file into graph
     g = TheGraph.read_from_gedcom(inpath)
+
+    # optional subgraph selection
+    if len(sys.argv) > 3:
+        start = g.by_id(sys.argv[3], False)
+        root = g.add_vertex()
+        ancestor_gatherer = Gatherer()
+        dfs_search(GraphView(g, reversed=True), start, ancestor_gatherer)
+        for ancestor in ancestor_gatherer.visited:
+            g.add_edge(root, ancestor)
+        g.vp.selected = g.new_vertex_property('bool')
+        dfs_search(g, root, Selector(g))
+        g.remove_vertex(root)
+        g.set_vertex_filter(g.vp.selected)
 
     # filtering out the main line of inheritance
     gmain = GraphView(g, efilt=g.ep.main)

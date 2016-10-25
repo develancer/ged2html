@@ -280,6 +280,7 @@ class TheGraph(Graph):
         :return TheGraph: graph instance
         """
         g = cls()
+        sex = None
         lastid = last0 = last1 = None
         regex = re.compile('^(\d+)\s+(\S+)(.*)$')
         regid = re.compile('^@([A-Z]\d+)@$')
@@ -295,6 +296,7 @@ class TheGraph(Graph):
                 if level == 0:
                     idmatch = regid.match(ident)
                     lastid = last0 = last1 = None
+                    sex = None
                     if idmatch is not None:
                         lastid = idmatch.group(1)
                         last0 = value
@@ -302,8 +304,11 @@ class TheGraph(Graph):
                 if level == 1 and last0 is not None:
                     last1 = ident
 
-                if level == 1 and last1 == 'DEAT':
+                if level == 1 and ident == 'DEAT':
                     g.vp.deat[g.by_id(lastid)] = ''
+
+                if level == 1 and ident == 'SEX':
+                    sex = value
 
                 if level == 2 and last0 == 'INDI' and last1 == 'NAME':
                     if ident == 'GIVN':
@@ -329,17 +334,21 @@ class TheGraph(Graph):
                     if last0 == 'FAM' and last1 == 'MARR' and ident == 'PLAC':
                         g.vp.plac[g.by_id(lastid)] = value
 
-                if level == 1 and last0 == 'FAM':
-                    other = value.strip('@')
-                    if ident == 'HUSB':
-                        e = g.add_edge(g.by_id(other), g.by_id(lastid))
-                        g.ep.main[e] = True
-                    if ident == 'WIFE':
-                        e = g.add_edge(g.by_id(other), g.by_id(lastid))
-                        g.vp.spouse[g.by_id(lastid)] = g.by_id(other)
-                    if ident == 'CHIL':
+                if level == 1:
+                    add_as_main = None
+                    if last0 == 'INDI' and ident == 'FAMS':
+                        if sex is None:
+                            raise Exception("undefined sex in node "+lastid)
+                        add_as_main = (sex == 'M')
+                    if last0 == 'FAM' and ident == 'CHIL':
+                        add_as_main = True
+                    if add_as_main is not None:
+                        other = value.strip('@')
                         e = g.add_edge(g.by_id(lastid), g.by_id(other))
-                        g.ep.main[e] = True
+                        if add_as_main:
+                            g.ep.main[e] = True
+                        else:
+                            g.vp.spouse[g.by_id(other)] = g.by_id(lastid)
 
         for v in g.vertices():
             if g.vp.gedid[v][0] == 'F':
@@ -347,9 +356,13 @@ class TheGraph(Graph):
                 mother = father = None
                 for to_parent in v.in_edges():
                     if g.ep.main[to_parent]:
+                        if to_father is not None:
+                            raise Exception("multiple fathers in family "+g.vp.gedid[v])
                         to_father = to_parent
                         father = to_father.source()
                     else:
+                        if to_mother is not None:
+                            raise Exception("multiple mothers in family "+g.vp.gedid[v])
                         to_mother = to_parent
                         mother = to_mother.source()
                 if mother is not None:
@@ -366,7 +379,8 @@ class TheGraph(Graph):
 
 if __name__ == "__main__":
     # reading command-line arguments
-    if len(sys.argv) < 3:
+    len_sys_argv = len(sys.argv)
+    if len_sys_argv != 3 and len_sys_argv != 4:
         sys.exit("USAGE: gedcom2graph.py input.ged output.html [ start_id ]")
     inpath, outpath = sys.argv[1:3]
 
@@ -374,7 +388,7 @@ if __name__ == "__main__":
     g = TheGraph.read_from_gedcom(inpath)
 
     # optional subgraph selection
-    if len(sys.argv) > 3:
+    if len_sys_argv == 4:
         start = g.by_id(sys.argv[3], False)
         root = g.add_vertex()
         ancestor_gatherer = Gatherer()

@@ -349,13 +349,15 @@ class TheGraph(Graph):
                             g.ep.main[e] = True
                         else:
                             g.vp.spouse[g.by_id(other)] = g.by_id(lastid)
+        return g
 
-        for v in g.vertices():
-            if g.vp.gedid[v][0] == 'F':
+    def fix_main_branch(self):
+        for v in self.vertices():
+            if self.vp.gedid[v][0] == 'F':
                 to_mother = to_father = None
                 mother = father = None
                 for to_parent in v.in_edges():
-                    if g.ep.main[to_parent]:
+                    if self.ep.main[to_parent]:
                         if to_father is not None:
                             raise Exception("multiple fathers in family "+g.vp.gedid[v])
                         to_father = to_parent
@@ -367,13 +369,12 @@ class TheGraph(Graph):
                         mother = to_mother.source()
                 if mother is not None:
                     if father is None:
-                        g.ep.main[to_mother] = True
-                        g.vp.spouse[v] = None
+                        self.ep.main[to_mother] = True
+                        self.vp.spouse[v] = None
                     elif mother.in_degree() and not father.in_degree():
-                        g.ep.main[to_mother] = True
-                        g.ep.main[to_father] = False
-                        g.vp.spouse[v] = father
-        return g
+                        self.ep.main[to_mother] = True
+                        self.ep.main[to_father] = False
+                        self.vp.spouse[v] = father
 
 ###############################################################################
 
@@ -392,15 +393,23 @@ if __name__ == "__main__":
         start = g.by_id(sys.argv[3], False)
         root = g.add_vertex()
         ancestor_gatherer = Gatherer()
+        # find all ancestors of the node
         dfs_search(GraphView(g, reversed=True), start, ancestor_gatherer)
         for ancestor in ancestor_gatherer.visited:
             g.add_edge(root, ancestor)
         g.vp.selected = g.new_vertex_property('bool')
+        # find all ancestors' descendants
         dfs_search(g, root, Selector(g))
         g.remove_vertex(root)
+        # include all spouses
+        for v in g.vertices():
+            if g.vp.selected[v] and g.vp.gedid[v][0] == 'F':
+                for w in v.in_neighbours():
+                    g.vp.selected[w] = True
         g.set_vertex_filter(g.vp.selected)
 
     # filtering out the main line of inheritance
+    g.fix_main_branch()
     gmain = GraphView(g, efilt=g.ep.main)
 
     # indexing connected components of the filtered graph

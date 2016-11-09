@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 """
 Convert GEDCOM family tree to a directed (sub)graph.
+If you pipe something to the standard input of the script,
+this content be inserted at the beginning of the HTML body.
 
-Usage: python gedcom2graph.py input.ged output.html
+Usage: python3 gedcom2graph.py input.ged output.html [ start_id ]
 """
 import sys
 import re
@@ -440,6 +442,9 @@ if __name__ == "__main__":
   .invis {visibility:hidden;}
 --></style></head><body>
 ''')
+        if not sys.stdin.isatty():
+            for line in sys.stdin:
+                f.write(line)
         for v in roots:
             f.write('<h2>Diagram %s. %s</h2>\n'
                     % (num_from_root[v], g.vp.surn[v]))

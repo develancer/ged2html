@@ -286,7 +286,7 @@ class TheGraph(Graph):
         lastid = last0 = last1 = None
         regex = re.compile('^(\d+)\s+(\S+)(.*)$')
         regid = re.compile('^@([A-Z]\d+)@$')
-        with open(path, 'rt') as file:
+        with open(path, 'rt', errors='ignore') as file:
             for line in file.readlines():
                 match = regex.match(line.strip())
                 if match is None:

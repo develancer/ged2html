@@ -406,7 +406,7 @@ if __name__ == "__main__":
         # include all spouses
         for v in g.vertices():
             if g.vp.selected[v] and g.vp.gedid[v][0] == 'F':
-                for w in v.in_neighbours():
+                for w in v.in_neighbors():
                     g.vp.selected[w] = True
         g.set_vertex_filter(g.vp.selected)
 

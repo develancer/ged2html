@@ -312,6 +312,12 @@ class TheGraph(Graph):
                 if level == 1 and ident == 'SEX':
                     sex = value
 
+                if level == 1 and ident == 'NAME':
+                    parts = value.split('/')
+                    if len(parts) >= 2:
+                        g.vp.givn[g.by_id(lastid)] = parts[0]
+                        g.vp.surn[g.by_id(lastid)] = parts[1]
+
                 if level == 2 and last0 == 'INDI' and last1 == 'NAME':
                     if ident == 'GIVN':
                         g.vp.givn[g.by_id(lastid)] = value

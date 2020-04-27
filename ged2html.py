@@ -1,10 +1,10 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """
-Convert GEDCOM family tree to a directed (sub)graph.
+Convert GEDCOM family tree to a set of HTML diagrams.
 If you pipe something to the standard input of the script,
 this content be inserted at the beginning of the HTML body.
 
-Usage: python3 gedcom2graph.py input.ged output.html [ start_id ]
+Usage: python3 ged2html.py input.ged output.html [ start_id ]
 """
 import sys
 import re

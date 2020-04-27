@@ -22,7 +22,7 @@ Example genealogical data is available in the `example` subdirectory. File `roya
 
 which generates a single file `output.html` with 215 (!) separate diagrams, starting like this:
 
-![all.png](https://raw.githubusercontent.com/develancer/ged2html/master/example/all.png)
+![all.png](/example/all.png?raw=true)
 
 To limit the amount of generated data, we can choose any one individual and restrict the output to individuals related to the selected person. For example, to generate diagrams for the ancestors, descendants and cousins of Princess Diana, we write
 
@@ -32,6 +32,6 @@ To limit the amount of generated data, we can choose any one individual and rest
 
 which results in *only* 16 diagrams, with the largest one looking like this:
 
-![diana.png](https://raw.githubusercontent.com/develancer/ged2html/master/example/diana.png)
+![diana.png](/example/diana.png?raw=true)
 
 By analysing the connections between diagrams, we can notice the significant mixing between separate lineages, even for such a small subset of our data.

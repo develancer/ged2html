@@ -6,6 +6,8 @@ this content be inserted at the beginning of the HTML body.
 
 Usage: python3 ged2html.py input.ged output.html [ start_id ]
 """
+import argparse
+import os.path
 import sys
 import re
 try:
@@ -18,6 +20,18 @@ except ImportError:
 if sys.hexversion < 0x030000F0:
     sys.exit("ERROR: Python 3 is needed to run this program")
 
+
+HTML_HEADER = '''<!DOCTYPE html>
+<head><meta charset="utf-8" />
+<style type="text/css"><!--
+  body {font-family:'DejaVu Serif', serif;}
+  .dates {font-size:smaller;}
+  .diagrams {font-weight:bold;}
+  .invis {visibility:hidden;}
+--></style></head><body>
+'''
+
+HTML_FOOTER = '</body>\n</html>\n'
 
 class Counter(DFSVisitor):
     """DFS visitor to count and index genealogical branches in the graph."""
@@ -121,10 +135,7 @@ class Printer(DFSVisitor):
             m = self.graph.vp.spouse[v]
             if m is not None:
                 line = '│ '*(self.level-1) + '┆'
-                small = '⚭' + self.graph.vp.date[v]
-                if self.graph.vp.plac[v]:
-                    small += ' ('+self.graph.vp.plac[v]+')'
-                line += '<span class=dates>' + small + '</span> '
+                line += self.graph.format_marriage(v)
                 self.lines.append(line + self._format_name(m))
 
     def finish_vertex(self, v):
@@ -230,6 +241,15 @@ class TheGraph(Graph):
         }
         return data[mon] if mon in data else mon
 
+    @classmethod
+    def _htmlspecialchars(cls, text: str):
+        return (
+            text.replace("&", "&amp;").
+            replace('"', "&quot;").
+            replace("<", "&lt;").
+            replace(">", "&gt;")
+        )
+
     def by_id(self, gedid: str, allow_create: bool = True):
         """
         Return node with given GEDCOM ID, or create one if it does not exist.
@@ -248,7 +268,7 @@ class TheGraph(Graph):
             raise Exception("node "+gedid+" does not exist")
         return v
 
-    def format_name(self, v):
+    def format_name(self, v, link=False):
         """
         Return human-readable representation of the vertex.
 
@@ -269,9 +289,21 @@ class TheGraph(Graph):
             small += ' †'+self.vp.deat[v]
             if self.vp.deap[v]:
                 small += ' ('+self.vp.deap[v]+')'
+        name = self._htmlspecialchars(name)
+        if link:
+            name = '<a href="'+self.vp.gedid[v]+'.html">' + name + '</a>'
         if small:
-            name += '<span class=dates>' + small + '</span>'
+            name += '<span class=dates>' + self._htmlspecialchars(small) + '</span>'
         return name
+
+    def format_marriage(self, v):
+        """
+        Return human-readable representation of the marriage's date and place.
+        """
+        small = '⚭' + self.vp.date[v]
+        if self.vp.plac[v]:
+            small += ' ('+self.vp.plac[v]+')'
+        return '<span class=dates>' + self._htmlspecialchars(small) + '</span> '
 
     @classmethod
     def read_from_gedcom(cls, path):
@@ -384,21 +416,69 @@ class TheGraph(Graph):
                         self.ep.main[to_father] = False
                         self.vp.spouse[v] = father
 
+    def create_html_structure(self, dir_path: str):
+        for v in self.vertices():
+            if self.vp.gedid[v][0] == 'I':
+                gedid = self.vp.gedid[v]
+                with open(os.path.join(dir_path, gedid+'.html'), 'wt') as f:
+                    f.write(HTML_HEADER)
+                    parents = []
+                    for to_family in v.in_edges():
+                        family = to_family.source()
+                        for is_main in [True, False]:
+                            for to_parent in family.in_edges():
+                                if self.ep.main[to_parent] == is_main:
+                                    parent = to_parent.source()
+                                    parents.append(self.format_name(parent, True))
+                    if parents:
+                        f.write('<p>' + '<br>&amp; '.join(parents) + '</p>')
+
+                    f.write('<h1>' + self.format_name(v) + '</h1>')
+
+                    for to_family in v.out_edges():
+                        family = to_family.target()
+                        for to_spouse in family.in_edges():
+                            spouse = to_spouse.source()
+                            if spouse != v:
+                                f.write('<h2>' + self.format_marriage(family) + '<br>' +
+                                    self.format_name(spouse, True)
+                                    + '</h2>')
+                        f.write('<ul>')
+                        for to_child in family.out_edges():
+                            child = to_child.target()
+                            f.write('<li>' + self.format_name(child, True) + '</li>')
+                        f.write('</ul>')
+
+                    f.write(HTML_FOOTER)
+
 ###############################################################################
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Generate HTML file(s) from GEDCOM data.')
+    parser.add_argument('inpath', metavar='input.ged', help='path to GEDCOM file')
+    parser.add_argument('start', metavar='start_id', nargs='?', help='GEDCOM ID of the starting individual')
+    parser.add_argument('--out', help='path for generated HTML file with diagrams')
+    parser.add_argument('--pagedir', help='directory for generating separate HTML pages for each individual')
+
     # reading command-line arguments
-    len_sys_argv = len(sys.argv)
-    if len_sys_argv != 3 and len_sys_argv != 4:
-        sys.exit("USAGE: gedcom2graph.py input.ged output.html [ start_id ]")
-    inpath, outpath = sys.argv[1:3]
+    args = parser.parse_args()
+    if args.out is None and args.pagedir is None:
+         parser.error('--out and/or --pagedir must be supplied')
 
     # reading GEDCOM file into graph
-    g = TheGraph.read_from_gedcom(inpath)
+    g = TheGraph.read_from_gedcom(args.inpath)
+    
+    # creating individual pages for family members
+    if args.pagedir is not None:
+        g.create_html_structure(args.pagedir)
+
+    # if only --pagedir was requested
+    if args.out is None:
+        sys.exit()
 
     # optional subgraph selection
-    if len_sys_argv == 4:
-        start = g.by_id(sys.argv[3], False)
+    if args.start is not None:
+        start = g.by_id(args.start, False)
         root = g.add_vertex()
         ancestor_gatherer = Gatherer()
         # find all ancestors of the node
@@ -438,16 +518,8 @@ if __name__ == "__main__":
         num_from_root[v] = str(len(roots))
 
     # writing results as HTML
-    with open(outpath, 'wt') as f:
-        f.write('''<!DOCTYPE html>
-<head><meta charset="utf-8" />
-<style type="text/css"><!--
-  body {font-family:'DejaVu Serif', serif;}
-  .dates {font-size:smaller;}
-  .diagrams {font-weight:bold;}
-  .invis {visibility:hidden;}
---></style></head><body>
-''')
+    with open(args.out, 'wt') as f:
+        f.write(HTML_HEADER)
         if not sys.stdin.isatty():
             for line in sys.stdin:
                 f.write(line)
@@ -460,4 +532,4 @@ if __name__ == "__main__":
             for line in printer.lines:
                 f.write(line+"<br>\n")
             f.write('</p>\n')
-        f.write('</body>\n</html>\n')
+        f.write(HTML_FOOTER)
